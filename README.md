@@ -12,10 +12,10 @@ This repository stores code and results for the Computational Social Science Lab
 - `prompts.txt`: example prompt file.
 - `requirements.txt`: Python dependencies needed to run the project code.
 - `setup_env.sh`: setup script that creates or updates a Python virtual environment in the parent folder.
-- `run_llama_vllm.slurm`: Slurm job script for running `main.py`.
+- `run_vllm.slurm`: Slurm job script for running `main.py`.
 - `vllm_runner.py`: reusable vLLM helpers used by `main.py` and the MWE.
 - `mwe/main_vllm.py`: minimal smoke test for checking that vLLM loads and generates.
-- `mwe/run_llama_vllm.slurm`: Slurm job script for the vLLM smoke test.
+- `mwe/test_vllm.slurm`: Slurm job script for the vLLM smoke test.
 
 ## Running vLLM
 
@@ -29,7 +29,7 @@ Submit the default test job from mwe folder:
 
 ```bash
 cd mwe
-sbatch run_llama_vllm.slurm
+sbatch test_vllm.slurm
 ```
 
 The reusable vLLM functions can be imported from project code:

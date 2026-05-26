@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=llama_vllm_main
+#SBATCH --job-name=vllm_main
 #SBATCH --output=logs/slurm-%j.out
-#SBATCH --error=logs/slurm-%j.err
+#SBATCH --error=logs/slurm-%j.out
 #SBATCH --partition=c23g
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -16,6 +16,13 @@ module load Python/3.11.5
 
 REPO_ROOT="${SLURM_SUBMIT_DIR:-$(pwd)}"
 VENV_DIR="${VENV_DIR:-${HOME}/.venv}"
+
+if [ ! -f "${REPO_ROOT}/main.py" ]; then
+    echo "Could not find main.py in ${REPO_ROOT}" >&2
+    echo "Submit this job from the repository root:" >&2
+    echo "  cd /path/to/csslab-llm-bias && sbatch run_vllm.slurm" >&2
+    exit 1
+fi
 
 source "${VENV_DIR}/bin/activate"
 cd "${REPO_ROOT}"

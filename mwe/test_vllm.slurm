@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=llama_vllm_test
+#SBATCH --job-name=vllm_mwe
 #SBATCH --output=../logs/mwe/slurm-%j.out
 #SBATCH --error=../logs/mwe/slurm-%j.out
 #SBATCH --partition=c23g
@@ -32,8 +32,8 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
 mkdir -p "$HF_HOME" logs/mwe
 
 # Override model at submission time if needed:
-#   cd mwe && sbatch run_llama_vllm.slurm
-#   cd mwe && sbatch --export=ALL,MODEL_ID=meta-llama/Llama-3.1-8B-Instruct run_llama_vllm.slurm
+#   cd mwe && sbatch smoke_test_vllm.slurm
+#   cd mwe && sbatch --export=ALL,MODEL_ID=meta-llama/Llama-3.1-8B-Instruct smoke_test_vllm.slurm
 export MODEL_ID="${MODEL_ID:-meta-llama/Llama-3.2-1B-Instruct}"
 export TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-1}"
 export MAX_MODEL_LEN="${MAX_MODEL_LEN:-4096}"
