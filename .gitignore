@@ -1,0 +1,28 @@
+# Data
+data/*
+!data/README.md
+
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# VS Code
+.vscode/
+
+# Dependencies and environments
+node_modules/
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
