@@ -26,3 +26,9 @@ venv/
 env/
 __pycache__/
 *.py[cod]
+
+# Experiment outputs
+logs/results/*
+!logs/results/.gitkeep
+logs/list_experiment/*
+!logs/list_experiment/.gitkeep

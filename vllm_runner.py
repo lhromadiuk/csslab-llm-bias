@@ -70,7 +70,7 @@ def run_prompt(
     llm: LLM,
     prompt: str,
     max_tokens: int = 80,
-    temperature: float = 0.0,
+    temperature: float = 0.2,
 ) -> str:
     messages = [{"role": "user", "content": prompt}]
     return generate_from_messages(
