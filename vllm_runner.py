@@ -14,7 +14,7 @@ except ModuleNotFoundError:
     raise
 
 
-DEFAULT_MODEL_ID = "meta-llama/Llama-3.2-1B-Instruct"
+DEFAULT_MODEL_ID = os.getenv("VLLM_MODEL_ID", "Qwen/Qwen2.5-0.5B-Instruct")
 
 
 def load_hf_token() -> Optional[str]:

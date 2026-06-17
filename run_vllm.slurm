@@ -37,7 +37,7 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
 
 mkdir -p "$HF_HOME" logs
 
-MODEL_ID="${MODEL_ID:-meta-llama/Llama-3.2-1B-Instruct}"
+MODEL_ID="${MODEL_ID:-Qwen/Qwen2.5-0.5B-Instruct}"
 PROMPTS_FILE="${PROMPTS_FILE:-prompts.txt}"
 PROMPT_MODE="${PROMPT_MODE:-lines}"
 OUTPUT_FILE="${OUTPUT_FILE:-logs/generations.jsonl}"
