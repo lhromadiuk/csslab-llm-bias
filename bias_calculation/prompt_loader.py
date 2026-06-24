@@ -28,8 +28,7 @@ def load_prompts(
             if not line:
                 continue
             
-            # Wir packen die System-Anweisung und die Frage in EINEN String.
-            # Durch die klare Strukturierung weiß das LLM genau, was es tun soll.
+
             combined_prompt = (
                 f"Instruktion: Du bist Teilnehmer einer wissenschaftlichen Umfrage. Antworte auf die folgende Frage AUSSCHLIESSLICH mit einer einzelnen Ziffer. Gib kein anderes Wort und keine Erklärung ab. Nur die Ziffer. {line}"
             )
