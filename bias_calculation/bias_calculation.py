@@ -38,6 +38,9 @@ if __name__ == "__main__":
     llm_response_std = {}
     llm_response_ci_lower = {}
     llm_response_ci_upper = {}
+    
+    #storage for binary llm answers
+    llm_pi_direct = {}
 
     for j, col in enumerate(sensitive_columns):
 
@@ -57,10 +60,11 @@ if __name__ == "__main__":
             }
             ]
 
-            #antwort = generate_from_messages(llm, max_tokens=5, temperature=1.0, messages=messages)
-            antwort = '4'
+            antwort = generate_from_messages(llm, max_tokens=5, temperature=0.2, messages=messages)
+            #antwort = '4'
 
-            antworten = np.append(antworten, int(float(antwort.strip())))
+            valide_ziffer = int(float(antwort.strip()))
+            antworten.append(valide_ziffer)
         
         mean_antwort_j = np.mean(antworten)
         std_j = np.std(antworten, ddof=1)
@@ -75,6 +79,23 @@ if __name__ == "__main__":
 
         llm_response_means[col] = mean_antwort_j
         llm_raw_responses[col] = antworten
+
+        #binarise llm answers
+        bin_antworten = []
+        for val in antworten:
+            
+            if col in ['ma01b', 'ma02', 'ma03', 'ma04', 'mp02', 'mm03', 'mm04']:
+                bin_antworten.append(1 if val > 5 else 0)
+            elif col in ['ca13', 'fr10', 'fr04b', 'fr03b']:
+                bin_antworten.append(1 if val <= 2 else 0)
+            elif col == 'pi08':
+                bin_antworten.append(1 if val <= 3 else 0)
+            elif col == 'mm05':
+                bin_antworten.append(1 if val <= 4 else 0)
+            elif col == 'ca08':
+                bin_antworten.append(1 if val >= 3 else 0)
+                
+        llm_pi_direct[col] = np.mean(bin_antworten) if bin_antworten else np.nan
 
 
     all_human_weights = {}
@@ -109,6 +130,10 @@ if __name__ == "__main__":
 
     all_absolute_biases = {}
     all_self_perception_biases = {}
+    lr_matched_mean = {}
+    
+    #storage for allbus approval rates
+    human_pi_allbus = {}
 
 
     for col in sensitive_columns:
@@ -134,27 +159,48 @@ if __name__ == "__main__":
 
         # self_perception bias
         all_self_perception_biases[col] = lr_self_assessed - lr_matched_j_mean
+
+        lr_matched_mean[col] = lr_matched_j_mean
+        
+        #binarize real allbus data
+        if col in ['ma01b', 'ma02', 'ma03', 'ma04', 'mp02', 'mm03', 'mm04']:
+            col_data['binarized'] = np.where(col_data[col] > 5, 1, 0)
+        elif col in ['ca13', 'fr10', 'fr04b', 'fr03b']:
+            col_data['binarized'] = np.where(col_data[col] <= 2, 1, 0)
+        elif col == 'pi08':
+            col_data['binarized'] = np.where(col_data[col] <= 3, 1, 0)
+        elif col == 'mm05':
+            col_data['binarized'] = np.where(col_data[col] <= 4, 1, 0)
+        elif col == 'ca08':
+            col_data['binarized'] = np.where(col_data[col] >= 3, 1, 0)
+
+
+        mean = col_data['binarized'].mean()
+            
+        human_pi_allbus[col] = mean
             
 
-    
  
     results_dir = os.path.join(script_dir, "..", "results")
     os.makedirs(results_dir, exist_ok=True)
 
     #breakpoint()
 
+    bias_direct_percentage = {col: llm_pi_direct[col] - human_pi_allbus[col] for col in sensitive_columns}
 
     results_df = pd.DataFrame({
         "LLM_Mean": llm_response_means,
+        "LLM mean mapped": lr_matched_mean,
         "Human_Center_Mean": {col: all_human_weights[col].get(5) for col in sensitive_columns},
         "Absolute_Bias": all_absolute_biases,
-        "Self_Perception_Bias": all_self_perception_biases ,
-        "llm standard deviation":llm_response_std,
-        "llm lower bound confidence interval":llm_response_ci_lower,
-        "llm upper bound confidence interval":llm_response_ci_upper,
-        
+        "Self_Perception_Bias": all_self_perception_biases,
+        "llm standard deviation": llm_response_std,
+        "llm lower bound confidence interval": llm_response_ci_lower,
+        "llm upper bound confidence interval": llm_response_ci_upper,
+        "pi_Direct": llm_pi_direct,
+        "pi_ALLBUS": human_pi_allbus,
+        "Bias_Direct": bias_direct_percentage
     })
     
     csv_path = os.path.join(results_dir, "bias_results.csv")
     results_df.to_csv(csv_path, index_label="allbus_variable")
-
