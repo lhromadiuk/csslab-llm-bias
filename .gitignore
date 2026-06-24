@@ -2,6 +2,9 @@
 data/*
 !data/README.md
 
+notebook/*
+results/*
+
 
 # macOS
 .DS_Store
