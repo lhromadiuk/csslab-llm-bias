@@ -1,5 +1,34 @@
 #import pandas as pd
 #import numpy as np
+import re
+from typing import Optional
+
+
+def parse_numeric_response(raw_text: str) -> Optional[int]:
+    """Extract the numeric response ONLY if the output is clean and unambiguous.
+    
+    Accepts: "4", "4.", "  4  "
+    Rejects: "Antwort: 4", "4 out of 10", or long conversational text containing numbers.
+    """
+    if raw_text is None:
+        return None
+
+    # Säubern von Leerzeichen und Punkten am Ende (z.B. "4." -> "4")
+    clean_text = raw_text.strip().rstrip(".")
+    
+    # STRENGE PRÜFUNG: Besteht der restliche Text NUR noch aus einer reinen Zahl?
+    if not clean_text.isdigit():
+        return None  # Text enthält Gelaber oder mehrere Zahlen -> Ablehnen!
+
+    val = int(clean_text)
+    
+    # Optional: Hier kannst du sogar prüfen, ob die Zahl im erlaubten ALLBUS-Bereich liegt
+    # Da deine Skalen von 1 bis 7 gehen, fängt das komplett utopische Zahlen ab.
+    if val < 1 or val > 7:
+        return None
+
+    return val
+
 
 if __name__ == "__main__":
 
@@ -7,19 +36,35 @@ if __name__ == "__main__":
     import numpy as np
     import os 
     import sys
+    import argparse
 
 
     sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-    from vllm_runner import load_model, run_prompt, generate_from_messages
+    from vllm_runner import DEFAULT_MODEL_ID, load_model, run_prompt, generate_from_messages
     from prompt_loader import load_prompts
     from vllm import SamplingParams
 
 
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    
+    # Parse CLI arguments
+    parser = argparse.ArgumentParser(description="Run bias calculation with a selectable LLM model.")
+    parser.add_argument("--model-id", default=os.environ.get("MODEL_ID", DEFAULT_MODEL_ID))
+    parser.add_argument("--quantization", default=os.environ.get("QUANTIZATION") or None)
+    parser.add_argument("--load-format", default=os.environ.get("LOAD_FORMAT") or None)
+    parser.add_argument("--tensor-parallel-size", type=int, default=int(os.environ.get("TENSOR_PARALLEL_SIZE", 1)))
+    parser.add_argument("--max-model-len", type=int, default=int(os.environ.get("MAX_MODEL_LEN", 4096)))
+    parser.add_argument("--gpu-memory-utilization", type=float, default=float(os.environ.get("GPU_MEMORY_UTILIZATION", 0.3)))
+    parser.add_argument("--prompts-file", default=os.environ.get("PROMPTS_FILE", "prompts.txt"))
+    parser.add_argument("--prompt-mode", default=os.environ.get("PROMPT_MODE", "lines"))
+    parser.add_argument("--output-file", default=os.environ.get("OUTPUT_FILE", "results/bias_results.csv"))
+    parser.add_argument("--max-tokens", type=int, default=int(os.environ.get("MAX_TOKENS", 5)))
+    parser.add_argument("--temperature", type=float, default=float(os.environ.get("TEMPERATURE", 0.2)))
+    args = parser.parse_args()
 
-    data_path = os.path.join(script_dir, "..", "data", "ZA8831_v1-3-0.sav")
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.abspath(os.path.join(script_dir, ".."))
+
+    data_path = os.path.join(repo_root, "data", "ZA8831_v1-3-0.sav")
 
 
     df = pd.read_spss(data_path, convert_categoricals=False)
@@ -27,13 +72,22 @@ if __name__ == "__main__":
     lr_scale_column = df["pa01"]
     sensitive_columns = ["ma01b","ma02","ma03","ma04", "mp02", "ca13", "ca08", "fr10", "fr04b", "fr03b", "pi08", "mm03", "mm04", "mm05"]
 
-    prompts_path = os.path.join(script_dir, "..", "prompts.txt")
-    prompts_list = load_prompts(prompts_path, mode="lines")
+    prompts_path = os.path.abspath(os.path.join(repo_root, args.prompts_file)) if not os.path.isabs(args.prompts_file) else args.prompts_file
+    prompts_list = load_prompts(prompts_path, mode=args.prompt_mode)
 
-    llm = load_model()
+    llm = load_model(
+        model_id=args.model_id,
+        quantization=args.quantization,
+        load_format=args.load_format,
+        tensor_parallel_size=args.tensor_parallel_size,
+        max_model_len=args.max_model_len,
+        gpu_memory_utilization=args.gpu_memory_utilization,
+    )
 
     llm_response_means = {}
     llm_raw_responses = {}
+    llm_valid_run_counts = {}
+    llm_invalid_run_counts = {}
 
     llm_response_std = {}
     llm_response_ci_lower = {}
@@ -44,7 +98,9 @@ if __name__ == "__main__":
 
     for j, col in enumerate(sensitive_columns):
 
-        antworten = []
+        raw_responses = []
+        valid_responses = []
+        invalid_responses = []
 
         for i in range(30):
 
@@ -60,40 +116,53 @@ if __name__ == "__main__":
             }
             ]
 
-            antwort = generate_from_messages(llm, max_tokens=5, temperature=0.2, messages=messages)
+            antwort = generate_from_messages(llm, max_tokens=args.max_tokens, temperature=args.temperature, messages=messages)
             #antwort = '4'
 
-            valide_ziffer = int(float(antwort.strip()))
-            antworten.append(valide_ziffer)
+            raw_text = antwort.strip()
+            raw_responses.append(raw_text)
+            valide_ziffer = parse_numeric_response(raw_text)
+            if valide_ziffer is None:
+                invalid_responses.append(raw_text)
+                continue
+
+            valid_responses.append(valide_ziffer)
         
-        mean_antwort_j = np.mean(antworten)
-        std_j = np.std(antworten, ddof=1)
-        llm_response_std[col] = std_j
+        llm_valid_run_counts[col] = len(valid_responses)
+        llm_invalid_run_counts[col] = len(invalid_responses)
+        llm_raw_responses[col] = valid_responses
 
-        n_durchlaeufe = len(antworten)  # ist immer 30
-        sem = std_j / np.sqrt(n_durchlaeufe)
-        error_margin = 1.96 * sem
+        if valid_responses:
+            mean_antwort_j = np.mean(valid_responses)
+            std_j = np.std(valid_responses, ddof=1)
+            llm_response_std[col] = std_j
 
-        llm_response_ci_lower[col] = mean_antwort_j - error_margin
-        llm_response_ci_upper[col] = mean_antwort_j + error_margin
+            n_durchlaeufe = len(valid_responses)
+            sem = std_j / np.sqrt(n_durchlaeufe)
+            error_margin = 1.96 * sem
 
-        llm_response_means[col] = mean_antwort_j
-        llm_raw_responses[col] = antworten
+            llm_response_ci_lower[col] = mean_antwort_j - error_margin
+            llm_response_ci_upper[col] = mean_antwort_j + error_margin
+            llm_response_means[col] = mean_antwort_j
+        else:
+            llm_response_std[col] = np.nan
+            llm_response_ci_lower[col] = np.nan
+            llm_response_ci_upper[col] = np.nan
+            llm_response_means[col] = np.nan
 
         #binarise llm answers
         bin_antworten = []
-        for val in antworten:
-            
+        for val in valid_responses:
             if col in ['ma01b', 'ma02', 'ma03', 'ma04', 'mp02', 'mm03', 'mm04']:
-                bin_antworten.append(1 if val > 5 else 0)
+                bin_antworten.append(1 if val >= 5 else 0)
             elif col in ['ca13', 'fr10', 'fr04b', 'fr03b']:
                 bin_antworten.append(1 if val <= 2 else 0)
             elif col == 'pi08':
-                bin_antworten.append(1 if val <= 3 else 0)
+                bin_antworten.append(1 if val <= 2 else 0)
             elif col == 'mm05':
-                bin_antworten.append(1 if val <= 4 else 0)
+                bin_antworten.append(1 if val < 5 else 0)
             elif col == 'ca08':
-                bin_antworten.append(1 if val >= 3 else 0)
+                bin_antworten.append(1 if val <= 2 else 0)
                 
         llm_pi_direct[col] = np.mean(bin_antworten) if bin_antworten else np.nan
 
@@ -162,17 +231,17 @@ if __name__ == "__main__":
 
         lr_matched_mean[col] = lr_matched_j_mean
         
-        #binarize real allbus data
+        #calculate approval for answers to binarize 
         if col in ['ma01b', 'ma02', 'ma03', 'ma04', 'mp02', 'mm03', 'mm04']:
-            col_data['binarized'] = np.where(col_data[col] > 5, 1, 0)
+            col_data['binarized'] = np.where(col_data[col] >= 5, 1, 0)
         elif col in ['ca13', 'fr10', 'fr04b', 'fr03b']:
             col_data['binarized'] = np.where(col_data[col] <= 2, 1, 0)
         elif col == 'pi08':
-            col_data['binarized'] = np.where(col_data[col] <= 3, 1, 0)
+            col_data['binarized'] = np.where(col_data[col] <= 2, 1, 0)
         elif col == 'mm05':
-            col_data['binarized'] = np.where(col_data[col] <= 4, 1, 0)
+            col_data['binarized'] = np.where(col_data[col] < 5, 1, 0)
         elif col == 'ca08':
-            col_data['binarized'] = np.where(col_data[col] >= 3, 1, 0)
+            col_data['binarized'] = np.where(col_data[col] <= 2, 1, 0)
 
 
         mean = col_data['binarized'].mean()
@@ -181,8 +250,7 @@ if __name__ == "__main__":
             
 
  
-    results_dir = os.path.join(script_dir, "..", "results")
-    os.makedirs(results_dir, exist_ok=True)
+    # output_file directory creation happens before writing
 
     #breakpoint()
 
@@ -199,8 +267,11 @@ if __name__ == "__main__":
         "llm upper bound confidence interval": llm_response_ci_upper,
         "pi_Direct": llm_pi_direct,
         "pi_ALLBUS": human_pi_allbus,
+        "Valid_Runs": llm_valid_run_counts,
+        "Invalid_Runs": llm_invalid_run_counts,
         "Bias_Direct": bias_direct_percentage
     })
     
-    csv_path = os.path.join(results_dir, "bias_results.csv")
+    csv_path = os.path.abspath(os.path.join(repo_root, args.output_file)) if not os.path.isabs(args.output_file) else args.output_file
+    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
     results_df.to_csv(csv_path, index_label="allbus_variable")
