@@ -5,7 +5,7 @@ data/*
 notebook/*
 results/*
 
-wording_only_bias/Evaluation_Results.ipynb
+experiments/wording_only_bias/Evaluation_Results.ipynb
 
 
 
