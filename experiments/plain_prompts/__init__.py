@@ -1,0 +1,1 @@
+"""Plain prompt-list task."""

@@ -5,14 +5,17 @@ This repository stores code and results for the Computational Social Science Lab
 ## Repository structure
 
 - `data/`: Raw data files are not published openly in this repository, please check the corresponding README file.
+- `experiments/`: project tasks with task-specific code and inputs.
+- `experiments/list_experiment/`: list experiment task, including trial construction and statement files.
+- `experiments/plain_prompts/`: plain prompt-file generation task.
 - `logs/`: logs generated during experiments.
 - `mwe/`: minimal working examples for model execution.
-- `main.py`: project entrypoint for running vLLM over prompts from a file.
-- `prompt_loader.py`: prompt-file loading and optional prompt-order randomization.
+- `main.py`: project entrypoint for selecting and running tasks.
+- `prompt_loader.py`: compatibility imports for older scripts.
 - `prompts.txt`: example prompt file.
 - `requirements.txt`: Python dependencies needed to run the project code.
 - `setup_env.sh`: setup script that creates or updates a Python virtual environment in the parent folder.
-- `run_vllm.slurm`: Slurm job script for running `main.py`.
+- `run_vllm.slurm`: Slurm job script for running the list experiment task.
 - `vllm_runner.py`: reusable vLLM helpers used by `main.py` and the MWE.
 - `mwe/main_vllm.py`: minimal smoke test for checking that vLLM loads and generates.
 - `mwe/test_vllm.slurm`: Slurm job script for the vLLM smoke test.
@@ -41,12 +44,22 @@ llm = load_model(model_id="meta-llama/Llama-3.2-1B-Instruct")
 answer = run_prompt(llm, "Explain vLLM briefly.")
 ```
 
+## Project Tasks
+
+`main.py` is the project entrypoint. Prefer the task subcommands for new runs:
+`list` runs the list experiment, and `plain` runs ordinary prompt files.
+
+```bash
+python3 main.py list --list-trial-kind sensitive_treatment --replicates-per-sensitive 5
+python3 main.py plain --prompts-file prompts.txt
+```
+
 ## List Experiment Mode
 
 This repository supports a list experiment setup with:
 
-- exactly 4 core statements from `core_statements.txt`
-- 1 sensitive statement at a time from `sensitive_statements.txt`
+- exactly 4 core statements from `experiments/list_experiment/data/core_statements.txt`
+- 1 sensitive statement at a time from `experiments/list_experiment/data/sensitive_statements.txt`
 - core-only control trials with just the 4 core statements
 - balanced order-effect blocks
 - `replicates_per_sensitive` total trials per sensitive statement, which must be a multiple of 5
@@ -70,19 +83,44 @@ mean(answer for that sensitive_treatment item)
 Run core-only controls via Slurm:
 
 ```bash
-sbatch --export=ALL,EXPERIMENT_MODE=list,LIST_TRIAL_KIND=core_control,CORE_CONTROL_REPLICATES=4,SEED=42 run_vllm.slurm
+sbatch --export=ALL,LIST_TRIAL_KIND=core_control,CORE_CONTROL_REPLICATES=4,SEED=42 run_vllm.slurm
 ```
 
 Run sensitive-treatment trials via Slurm:
 
 ```bash
-sbatch --export=ALL,EXPERIMENT_MODE=list,LIST_TRIAL_KIND=sensitive_treatment,REPLICATES_PER_SENSITIVE=5,SEED=42 run_vllm.slurm
+sbatch --export=ALL,LIST_TRIAL_KIND=sensitive_treatment,REPLICATES_PER_SENSITIVE=5,SEED=42 run_vllm.slurm
 ```
 
 Run both controls and treatments via Slurm:
 
 ```bash
-sbatch --export=ALL,EXPERIMENT_MODE=list,LIST_TRIAL_KIND=both,CORE_CONTROL_REPLICATES=4,REPLICATES_PER_SENSITIVE=5,SEED=42 run_vllm.slurm
+sbatch --export=ALL,LIST_TRIAL_KIND=both,CORE_CONTROL_REPLICATES=4,REPLICATES_PER_SENSITIVE=5,SEED=42 run_vllm.slurm
+```
+
+### Persona Random Mode
+
+Use `persona_random` when personas are the respondents. Put one persona prompt
+per line in:
+
+```text
+experiments/list_experiment/data/personas.txt
+```
+
+In this mode each persona gets:
+
+- one random core-control ordering
+- one random ordering for every sensitive statement
+
+So with 14 sensitive statements, each persona produces 15 rows total. With
+5,000 personas, that is 75,000 rows. The old `LIST_TRIAL_KIND`,
+`REPLICATES_PER_SENSITIVE`, and `CORE_CONTROL_REPLICATES` settings are for
+`balanced` mode; `persona_random` always creates the full per-persona bundle.
+
+Run persona-random mode via Slurm:
+
+```bash
+sbatch --export=ALL,ASSIGNMENT_MODE=persona_random,PERSONAS_FILE=experiments/list_experiment/data/personas.txt,SEED=42 run_vllm.slurm
 ```
 
 Default generation parameters are:
@@ -93,7 +131,6 @@ Default generation parameters are:
 Results are written to:
 
 - `logs/list_experiment/<run_id>.generations.jsonl`
-- `logs/list_experiment/<run_id>.errors.jsonl`
 
 Slurm stdout and stderr logs are written separately:
 
@@ -126,12 +163,9 @@ List-experiment rows also include:
 - `order_block_index`
 - `sensitive_position`: position 1-5, or `null` for controls
 - `order_labels`: compact item order, e.g. `["core_2", "sens_1", "core_4"]`
+- `persona_id`: persona id, or `null` for balanced mode
+- `persona_text`: persona prompt, or `null` for balanced mode
 
 The JSONL intentionally does not repeat the full rendered prompt separately from
 `messages`, and it does not store full `presented_items` text because the source
-statements already live in `core_statements.txt` and `sensitive_statements.txt`.
-
-Error rows include the attempted trial metadata plus:
-
-- `error_type`
-- `error`
+statements already live under `experiments/list_experiment/data/`.
