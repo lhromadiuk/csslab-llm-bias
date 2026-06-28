@@ -5,6 +5,10 @@ data/*
 notebook/*
 results/*
 
+wording_only_bias/Evaluation_Results.ipynb
+
+
+
 
 # macOS
 .DS_Store

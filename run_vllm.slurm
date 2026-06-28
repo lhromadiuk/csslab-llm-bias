@@ -15,7 +15,7 @@ set -euo pipefail
 module load Python/3.11.5
 
 REPO_ROOT="${SLURM_SUBMIT_DIR:-$(pwd)}"
-VENV_DIR="${VENV_DIR:-${HOME}/.venv}"
+VENV_DIR="${HOME}/css-lab-project/.venv"
 
 if [ ! -f "${REPO_ROOT}/main.py" ]; then
     echo "Could not find main.py in ${REPO_ROOT}" >&2
@@ -24,7 +24,8 @@ if [ ! -f "${REPO_ROOT}/main.py" ]; then
     exit 1
 fi
 
-source "${VENV_DIR}/bin/activate"
+# Lösche das alte VENV_DIR oder das alte "source"-Kommando und schreibe stattdessen:
+source /rwthfs/rz/cluster/home/xgy78490/css-lab-project/.venv/bin/activate
 cd "${REPO_ROOT}"
 
 if [ -z "${HF_TOKEN:-}" ] && [ -f "${HOME}/hfkey" ]; then
@@ -37,7 +38,7 @@ export VLLM_WORKER_MULTIPROC_METHOD=spawn
 
 mkdir -p "$HF_HOME" logs
 
-MODEL_ID="${MODEL_ID:-meta-llama/Llama-3.2-1B-Instruct}"
+MODEL_ID="${MODEL_ID:-mistralai/Mistral-7B-Instruct-v0.3}"
 PROMPTS_FILE="${PROMPTS_FILE:-prompts.txt}"
 PROMPT_MODE="${PROMPT_MODE:-lines}"
 OUTPUT_FILE="${OUTPUT_FILE:-logs/generations.jsonl}"
