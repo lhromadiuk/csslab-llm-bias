@@ -62,6 +62,8 @@ if [ -n "${SEED:-}" ]; then
     SHUFFLE_ARGS+=(--seed "$SEED")
 fi
 
+
+
 echo "Running on host: $(hostname)"
 echo "CUDA devices: ${CUDA_VISIBLE_DEVICES:-unset}"
 echo "Submit dir: ${REPO_ROOT}"

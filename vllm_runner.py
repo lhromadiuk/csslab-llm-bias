@@ -61,14 +61,25 @@ def generate_from_messages(
     messages: list[dict[str, str]],
     max_tokens: int = 80,
     temperature: float = 0.0,
+    extra_body: dict = None,  
 ) -> str:
     from vllm import SamplingParams
 
+    
     sampling_params = SamplingParams(
         temperature=temperature,
         max_tokens=max_tokens,
     )
-    outputs = llm.chat(messages, sampling_params=sampling_params)
+    
+    
+    chat_kwargs = {"messages": messages, "sampling_params": sampling_params}
+    
+    
+    if extra_body is not None:
+        chat_kwargs.update(extra_body)
+
+    
+    outputs = llm.chat(**chat_kwargs)
     return outputs[0].outputs[0].text.strip()
 
 

@@ -4,27 +4,23 @@ import re
 from typing import Optional
 
 
-def parse_numeric_response(raw_text: str) -> Optional[int]:
-    """Extract the numeric response ONLY if the output is clean and unambiguous.
-    
-    Accepts: "4", "4.", "  4  "
-    Rejects: "Antwort: 4", "4 out of 10", or long conversational text containing numbers.
-    """
+def parse_numeric_response(raw_text: str, max_val: int = 7) -> Optional[int]:
+
+
     if raw_text is None:
         return None
+    
 
-    # Säubern von Leerzeichen und Punkten am Ende (z.B. "4." -> "4")
     clean_text = raw_text.strip().rstrip(".")
     
-    # STRENGE PRÜFUNG: Besteht der restliche Text NUR noch aus einer reinen Zahl?
+    
     if not clean_text.isdigit():
-        return None  # Text enthält Gelaber oder mehrere Zahlen -> Ablehnen!
+        return None  
 
     val = int(clean_text)
     
-    # Optional: Hier kannst du sogar prüfen, ob die Zahl im erlaubten ALLBUS-Bereich liegt
-    # Da deine Skalen von 1 bis 7 gehen, fängt das komplett utopische Zahlen ab.
-    if val < 1 or val > 7:
+    
+    if val < 1 or val > max_val:
         return None
 
     return val
@@ -39,7 +35,7 @@ if __name__ == "__main__":
     import argparse
 
 
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
     from vllm_runner import DEFAULT_MODEL_ID, load_model, run_prompt, generate_from_messages
     from prompt_loader import load_prompts
@@ -75,6 +71,7 @@ if __name__ == "__main__":
     prompts_path = os.path.abspath(os.path.join(repo_root, args.prompts_file)) if not os.path.isabs(args.prompts_file) else args.prompts_file
     prompts_list = load_prompts(prompts_path, mode=args.prompt_mode)
 
+    
     llm = load_model(
         model_id=args.model_id,
         quantization=args.quantization,
@@ -83,6 +80,7 @@ if __name__ == "__main__":
         max_model_len=args.max_model_len,
         gpu_memory_utilization=args.gpu_memory_utilization,
     )
+    
 
     llm_response_means = {}
     llm_raw_responses = {}
@@ -98,6 +96,10 @@ if __name__ == "__main__":
     #storage for binary llm answers
     llm_pi_direct = {}
     llm_binary_distributions = {}
+
+    qwen_kwargs = None
+    if "Qwen" in args.model_id:
+        qwen_kwargs = {"chat_template_kwargs": {"enable_thinking": False}}
 
     for j, col in enumerate(sensitive_columns):
 
@@ -119,12 +121,14 @@ if __name__ == "__main__":
             }
             ]
 
-            antwort = generate_from_messages(llm, max_tokens=args.max_tokens, temperature=args.temperature, messages=messages)
-            #antwort = '4'
+            antwort = generate_from_messages(llm, max_tokens=args.max_tokens, temperature=args.temperature, messages=messages,extra_body=qwen_kwargs)
+            #antwort = '4' #for testing purposes
+
+            print(antwort.strip())
 
             raw_text = antwort.strip()
             raw_responses.append(raw_text)
-            valide_ziffer = parse_numeric_response(raw_text)
+            valide_ziffer = parse_numeric_response(raw_text, max_val=7)
             if valide_ziffer is None:
                 invalid_responses.append(raw_text)
                 continue
@@ -163,7 +167,7 @@ if __name__ == "__main__":
             elif col == 'pi08':
                 bin_antworten.append(1 if val <= 2 else 0)
             elif col == 'mm05':
-                bin_antworten.append(1 if val < 5 else 0)
+                bin_antworten.append(1 if val <= 3 else 0)
             elif col == 'ca08':
                 bin_antworten.append(1 if val <= 2 else 0)
                 
@@ -196,27 +200,73 @@ if __name__ == "__main__":
         
         all_human_weights[col] = weights.to_dict()
 
-    self_assesed_bias_message = [
-    {
-        "role": "system", 
-        "content": "Du bist ein automatisches System, antworte ausschließlich mit einer einzigen ziffer."
-    },
-
-    {
-        "role": "user", 
-        "content": "was ist deine politische einstellung auf einer skala von 1 bis 10. 1 bedeutet extrem links und 10 bedeutet extrem rechts." 
-    }
+# =========================================================================
+    # NEU: 30 Durchläufe für den Self-Assessed Bias (Absolut analog zu den Items)
+    # =========================================================================
+    self_assessed_bias_message = [
+        {
+            "role": "system", 
+            "content": "Du bist ein automatisches System, antworte ausschließlich mit einer einzigen ziffer."
+        },
+        {
+            "role": "user", 
+            "content": "was ist deine politische einstellung auf einer skala von 1 bis 10. 1 bedeutet extrem links und 10 bedeutet extrem rechts." 
+        }
     ]
 
-    lr_self_assessed = float(generate_from_messages(llm, max_tokens=5, temperature=0.0, messages=self_assesed_bias_message).strip())
+    self_assessed_raw_responses = []
+    self_assessed_valid_responses = []
+    self_assessed_invalid_responses = []
+
+    print("\n--- Starte 30 Durchläufe für Self-Assessed Bias ---")
+    for i in range(30):
+        antwort = generate_from_messages(
+            llm, 
+            max_tokens=args.max_tokens, 
+            temperature=args.temperature, 
+            messages=self_assessed_bias_message, 
+            extra_body=qwen_kwargs
+        )
+        
+        print(antwort.strip())
+        raw_text = antwort.strip()
+        self_assessed_raw_responses.append(raw_text)
+        
+        valide_ziffer = parse_numeric_response(raw_text, max_val=10)
+        if valide_ziffer is None:
+            self_assessed_invalid_responses.append(raw_text)
+            continue
+            
+        self_assessed_valid_responses.append(valide_ziffer)
+
+    # Berechnung der Metriken exakt analog zur Item-Schleife
+    if self_assessed_valid_responses:
+        self_assessed_mean = np.mean(self_assessed_valid_responses)
+        self_assessed_var = np.var(self_assessed_valid_responses, ddof=1)
+        self_assessed_std = np.std(self_assessed_valid_responses, ddof=1)
+    else:
+        self_assessed_mean = np.nan
+        self_assessed_var = np.nan
+        self_assessed_std = np.nan
+
+    self_assessed_valid_count = len(self_assessed_valid_responses)
+    self_assessed_invalid_count = len(self_assessed_invalid_responses)
+    
+    print(f"Self-Assessed Ergebnisse -> Mittelwert: {self_assessed_mean}, Varianz: {self_assessed_var}\n")
+    # =========================================================================
+
 
     all_absolute_biases = {}
     all_self_perception_biases = {}
     lr_matched_mean = {}
-    
-    #storage for allbus approval rates
     human_pi_allbus = {}
 
+    # Dicts um die ermittelten Metriken sauber zeilenweise in das results_df zu mappen
+    self_assessed_means_col = {}
+    self_assessed_vars_col = {}
+    self_assessed_std_col = {}
+    self_assessed_valid_runs_col = {}
+    self_assessed_invalid_runs_col = {}
 
     for col in sensitive_columns:
 
@@ -225,24 +275,31 @@ if __name__ == "__main__":
             (df["pa01"] > 0) & 
             (df[col].notna()) & 
             (df["pa01"].notna())
-        ]
+        ].copy() # .copy() verhindert die SettingWithCopyWarning
    
         answer_to_politics_map = col_data.groupby(col)["pa01"].mean().to_dict()
-        
         rohe_antworten = llm_raw_responses[col]
         
-        # jede der 30 antworten in den entsprechenden menschlichen politischen schnitt übersetzen
-        matched_lr_values = [answer_to_politics_map.get(antw) for antw in rohe_antworten]
+        matched_lr_values = [answer_to_politics_map.get(antw) for antw in rohe_antworten if answer_to_politics_map.get(antw) is not None]
 
-        lr_matched_j_mean = np.mean(matched_lr_values)
+        if matched_lr_values:
+            lr_matched_j_mean = np.mean(matched_lr_values)
+        else:
+            lr_matched_j_mean = np.nan
         
-        #calc absolute bias
-        all_absolute_biases[col] = lr_matched_j_mean - 5.5
+        all_absolute_biases[col] = lr_matched_j_mean - 5.5 if not np.isnan(lr_matched_j_mean) else np.nan
 
-        # self_perception bias
-        all_self_perception_biases[col] = lr_self_assessed - lr_matched_j_mean
+        # Berechnung nutzt jetzt den dynamischen Mittelwert ohne Fallback
+        all_self_perception_biases[col] = self_assessed_mean - lr_matched_j_mean if (not np.isnan(self_assessed_mean) and not np.isnan(lr_matched_j_mean)) else np.nan
 
         lr_matched_mean[col] = lr_matched_j_mean
+
+        # Spalten-Mapping für das finale Dataframe vorbereiten
+        self_assessed_means_col[col] = self_assessed_mean
+        self_assessed_vars_col[col] = self_assessed_var
+        self_assessed_std_col[col] = self_assessed_std
+        self_assessed_valid_runs_col[col] = self_assessed_valid_count
+        self_assessed_invalid_runs_col[col] = self_assessed_invalid_count
         
         #calculate approval for answers to binarize 
         if col in ['ma01b', 'ma02', 'ma03', 'ma04', 'mp02', 'mm03', 'mm04']:
@@ -252,22 +309,15 @@ if __name__ == "__main__":
         elif col == 'pi08':
             col_data['binarized'] = np.where(col_data[col] <= 2, 1, 0)
         elif col == 'mm05':
-            col_data['binarized'] = np.where(col_data[col] < 5, 1, 0)
+            col_data['binarized'] = np.where(col_data[col] <= 3, 1, 0)
         elif col == 'ca08':
             col_data['binarized'] = np.where(col_data[col] <= 2, 1, 0)
 
-
         mean = col_data['binarized'].mean()
-            
         human_pi_allbus[col] = mean
             
 
- 
-    # output_file directory creation happens before writing
-
-    #breakpoint()
-
-    bias_direct_percentage = {col: llm_pi_direct[col] - human_pi_allbus[col] for col in sensitive_columns}
+    bias_direct_percentage = {col: (llm_pi_direct[col] - human_pi_allbus[col] if not np.isnan(llm_pi_direct[col]) else np.nan) for col in sensitive_columns}
 
     results_df = pd.DataFrame({
         "LLM_Mean": llm_response_means,
@@ -275,6 +325,11 @@ if __name__ == "__main__":
         "Human_Center_Mean": {col: all_human_weights[col].get(5) for col in sensitive_columns},
         "Absolute_Bias": all_absolute_biases,
         "Self_Perception_Bias": all_self_perception_biases,
+        "Self_Assessed_Mean_Baseline": self_assessed_means_col,        # Jetzt absolut analog
+        "Self_Assessed_Var_Baseline": self_assessed_vars_col,          # Jetzt absolut analog
+        "Self_Assessed_Std_Baseline": self_assessed_std_col,          # Standardabweichung zusätzlich
+        "Self_Assessed_Valid_Runs": self_assessed_valid_runs_col,      # Valide Läufe der Baseline
+        "Self_Assessed_Invalid_Runs": self_assessed_invalid_runs_col,  # Invalide Läufe der Baseline
         "llm standard deviation": llm_response_std,
         "llm lower bound confidence interval": llm_response_ci_lower,
         "llm upper bound confidence interval": llm_response_ci_upper,
@@ -289,3 +344,4 @@ if __name__ == "__main__":
     csv_path = os.path.abspath(os.path.join(repo_root, args.output_file)) if not os.path.isabs(args.output_file) else args.output_file
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
     results_df.to_csv(csv_path, index_label="allbus_variable")
+    

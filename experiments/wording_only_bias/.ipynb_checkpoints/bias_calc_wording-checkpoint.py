@@ -4,28 +4,29 @@ import re
 
 from typing import Optional
 
-def parse_numeric_response(raw_text: str, max_val: int = 7) -> Optional[int]:
-
-
+def parse_numeric_response(raw_text: str) -> Optional[int]:
+    """Extract the numeric response ONLY if the output is clean and unambiguous.
+    
+    Accepts: "4", "4.", "  4  "
+    Rejects: "Antwort: 4", "4 out of 10", or long conversational text containing numbers.
+    """
     if raw_text is None:
         return None
-    
 
+    # clean by removing whitespace 
     clean_text = raw_text.strip().rstrip(".")
     
-    
+    # does the text contain only digits?
     if not clean_text.isdigit():
         return None  
 
     val = int(clean_text)
     
-    
-    if val < 1 or val > max_val:
+    #remove any values outside the expected range of 1-7
+    if val < 1 or val > 7:
         return None
 
     return val
-
-
 
 
 
@@ -38,7 +39,7 @@ if __name__ == "__main__":
     import argparse
 
 
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
     from vllm_runner import DEFAULT_MODEL_ID, load_model, run_prompt, generate_from_messages
     from prompt_loader import load_prompts
@@ -61,7 +62,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    repo_root = os.path.abspath(os.path.join(script_dir, "..", ".."))
+    repo_root = os.path.abspath(os.path.join(script_dir, ".."))
 
     data_path = os.path.join(repo_root, "data", "ZA8831_v1-3-0.sav")
 
@@ -104,10 +105,6 @@ if __name__ == "__main__":
     llm_pi_direct = {}
     llm_binary_distributions = {}
 
-    qwen_kwargs = None
-    if "Qwen" in args.model_id:
-        qwen_kwargs = {"chat_template_kwargs": {"enable_thinking": False}}
-
 
     for idx, prompt_text in enumerate(prompts_list):
         # Berechnen, zu welcher originalen Spalte (0-13) und welcher Variante (1-3) dieser Prompt gehört
@@ -134,12 +131,12 @@ if __name__ == "__main__":
                 }
             ]
 
-            antwort = generate_from_messages(llm, max_tokens=args.max_tokens, temperature=args.temperature, messages=messages,extra_body=qwen_kwargs)
+            antwort = generate_from_messages(llm, max_tokens=args.max_tokens, temperature=args.temperature, messages=messages)
             #antwort = '4' #temporary test for debugging, replace with the above line in production
 
             raw_text = antwort.strip()
             raw_responses.append(raw_text)
-            valide_ziffer = parse_numeric_response(raw_text, max_val=7)
+            valide_ziffer = parse_numeric_response(raw_text)
             if valide_ziffer is None:
                 invalid_responses.append(raw_text)
                 continue
@@ -221,7 +218,7 @@ if __name__ == "__main__":
         elif col == 'pi08':
             valid_data['binarized'] = np.where(valid_data[col] <= 2, 1, 0)
         elif col == 'mm05':
-            valid_data['binarized'] = (valid_data[col] <= 3).astype(int)
+            valid_data['binarized'] = (valid_data[col] < 5).astype(int)
         elif col == 'ca08':
             valid_data['binarized'] = np.where(valid_data[col] <= 2, 1, 0)
 
