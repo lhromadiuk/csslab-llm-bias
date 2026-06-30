@@ -7,12 +7,15 @@ This repository stores code and results for the Computational Social Science Lab
 - `data/`: Raw data files are not published openly in this repository, please check the corresponding README file.
 - `experiments/`: project tasks with task-specific code and inputs.
 - `experiments/list_experiment/`: list experiment task, including trial construction and statement files.
+- `experiments/bias_calculation/`: bias calculation task.
+- `experiments/wording_only_bias/`: calculation of approval bias with wording variations.
 - `experiments/plain_prompts/`: plain prompt-file generation task.
 - `logs/`: logs generated during experiments.
 - `mwe/`: minimal working examples for model execution.
 - `main.py`: project entrypoint for selecting and running tasks.
 - `prompt_loader.py`: compatibility imports for older scripts.
-- `prompts.txt`: example prompt file.
+- `prompts.txt`: prompt file used for bias calculation
+- `prompts_wording_variations.txt` prompt file with wording variations.
 - `requirements.txt`: Python dependencies needed to run the project code.
 - `setup_env.sh`: setup script that creates or updates a Python virtual environment in the parent folder.
 - `run_vllm.slurm`: Slurm job script for running the list experiment task.
