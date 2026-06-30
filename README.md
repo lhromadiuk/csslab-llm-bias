@@ -200,6 +200,7 @@ The script aggregates the $N=30$ runs and saves the results into `results/result
 - `pi_ALLBUS`: The baseline approval rate calculated from the human ALLBUS dataset.
 - `Bias_Direct`: The direct delta used for comparison with the list experiment results (`pi_Direct - pi_ALLBUS`).
 - `Valid_Runs` / `Invalid_Runs`: Operational log showing how many of the 30 runs parsed successfully into digits.
+- `LLM_Binary_Distribution`: Probability weights for the negative vs. positive approval ratio (1 - pi, pi).
 
 ## Wording Variations Mode
 This mode systematically tests 3 linguistic variations per sensitive ALLBUS item (yielding 42 structural conditions in total) to evaluate the model's sensitivity to prompt phrasing and formulation stability.
@@ -211,14 +212,13 @@ sbatch --export=ALL,MODE=simple,OUTPUT_FILE="results/wording_results_llama.csv",
 ```
 
 ### Output Fields (Wording Analysis CSV)
-The script aggregates the N=30 runs per variation and saves the results into results/bias_results_wording.csv with the following columns (indexed by allbus_variable_variation, e.g., ma01b_v1, ma01b_v2):
+The script runs the N=30 runs per variation and saves the results into results/bias_results_wording.csv with the following columns (indexed by allbus_variable_variation, e.g., ma01b_v1, ma01b_v2):
 
-- LLM_Mean: The average raw numerical score (1–7) assigned by the model for this specific variation across all valid runs.
-- llm standard deviation: The standard deviation (SD) across the 30 replications, capturing the phrasing-specific volatility.
-- llm lower bound confidence interval / _upper bound...: Standard 95% confidence intervals (CI) for the variation-specific means.
-- pi_Direct: The binarized agreement rate of the model under this wording condition (percentage of approving runs).
-- pi_ALLBUS: The baseline population approval rate calculated from the human ALLBUS dataset (mapped consistently onto all 3 variations of the same item).
-- Bias_Direct: The direct delta used for robustness and phrasing shift comparisons (pi_Direct - pi_ALLBUS).
-- LLM_Binary_Distribution: Probability weights for the negative vs. positive approval ratio (1 - pi, pi).
-- Valid_Runs / Invalid_Runs: Operational performance log showing how many runs parsed successfully.
-- LLM_Raw_Responses: Python list containing the raw string digits captured during the 30 evaluation loops.
+- `LLM_Mean`: The average numerical score (1–7) assigned by the model for this specific variation across all valid runs.
+- `llm standard deviation`: The standard deviation across the 30 replications.
+- `llm lower bound confidence interval / _upper bound`...: Standard 95% confidence intervals (CI) for the variation-specific means.
+- `pi_Direct`: The binarized agreement rate of the model under this wording condition (percentage of approving runs).
+- `pi_ALLBUS`: The baseline population approval rate calculated from the human ALLBUS dataset (mapped consistently onto all 3 variations of the same item).
+- `Bias_Direct`: The direct delta used for comparisons (pi_Direct - pi_ALLBUS).
+- `LLM_Binary_Distribution`: Probability weights for the negative vs. positive approval ratio (1 - pi, pi).
+- `Valid_Runs / Invalid_Runs`: how many runs have given us valid numbers?
