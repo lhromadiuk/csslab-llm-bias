@@ -188,22 +188,37 @@ sbatch --export=ALL,MODE=simple,MODEL_ID=meta-llama/Llama-3.1-70B-Instruct,TENSO
 
 The script aggregates the $N=30$ runs and saves the results into `results/results_bias_llama_2.csv` with the following columns (indexed by the ALLBUS variable name):
 
-#### 1. Core Metrics & Mapping
 - `LLM_Mean`: The average raw numerical score (1–7) assigned by the model across all valid runs.
 - `LLM mean mapped`: The LLM's average score mapped onto the empirical human political spectrum.
 - `Human_Center_Mean`: The benchmark score of human survey respondents who placed themselves exactly in the political center (5).
 - `Absolute_Bias`: The structural drift of the mapped score from the neutral scale midpoint (5.5).
-
-#### 2. Self-Assessment & Deviation
-`Self_Perception_Bias`: The mathematical delta between the model's explicit self-assessment and its actual item mapping.
+- `Self_Perception_Bias`: The mathematical delta between the model's explicit self-assessment and its actual item mapping.
 `Self_Assessed_Mean_Baseline` / `_Var_Baseline` / `_Std_Baseline`: Statistical metrics captured from the 30 independent explicit self-perception runs.
-
-#### 3. Stability & Variance
 - `llm standard deviation`: The standard deviation ($SD$) across the 30 item replications.
 - `llm lower bound confidence interval` / `_upper bound...`: Standard 95% confidence intervals ($CI$) for the generated means.
-
-#### 4. Binarization & Direct Rates (For List Experiment Comparison)
 - `pi_Direct`: The binarized agreement rate of the model (percentage of runs meeting the approval threshold).
 - `pi_ALLBUS`: The baseline approval rate calculated from the human ALLBUS dataset.
 - `Bias_Direct`: The direct delta used for comparison with the list experiment results (`pi_Direct - pi_ALLBUS`).
-- `Valid_Runs` / `Invalid_Runs`: Operational log showing how many of the 30 runs parsed successfully into digits. 
+- `Valid_Runs` / `Invalid_Runs`: Operational log showing how many of the 30 runs parsed successfully into digits.
+
+## Wording Variations Mode
+This mode systematically tests 3 linguistic variations per sensitive ALLBUS item (yielding 42 structural conditions in total) to evaluate the model's sensitivity to prompt phrasing and formulation stability.
+To run the calculation, change into the wording task directory and submit the Slurm job:
+
+```bash
+cd experiments/wording_only_bias
+sbatch --export=ALL,MODE=simple,OUTPUT_FILE="results/wording_results_llama.csv",MODEL_ID=meta-llama/Llama-3.1-70B-Instruct,QUANTIZATION=bitsandbytes,LOAD_FORMAT=bitsandbytes,TENSOR_PARALLEL_SIZE=1,GPU_MEMORY_UTILIZATION=0.90,MAX_MODEL_LEN=2048,TEMPERATURE=0.2,MAX_TOKENS=5 run_vllm_wording.slurm
+```
+
+### Output Fields (Wording Analysis CSV)
+The script aggregates the N=30 runs per variation and saves the results into results/bias_results_wording.csv with the following columns (indexed by allbus_variable_variation, e.g., ma01b_v1, ma01b_v2):
+
+- LLM_Mean: The average raw numerical score (1–7) assigned by the model for this specific variation across all valid runs.
+- llm standard deviation: The standard deviation (SD) across the 30 replications, capturing the phrasing-specific volatility.
+- llm lower bound confidence interval / _upper bound...: Standard 95% confidence intervals (CI) for the variation-specific means.
+- pi_Direct: The binarized agreement rate of the model under this wording condition (percentage of approving runs).
+- pi_ALLBUS: The baseline population approval rate calculated from the human ALLBUS dataset (mapped consistently onto all 3 variations of the same item).
+- Bias_Direct: The direct delta used for robustness and phrasing shift comparisons (pi_Direct - pi_ALLBUS).
+- LLM_Binary_Distribution: Probability weights for the negative vs. positive approval ratio (1 - pi, pi).
+- Valid_Runs / Invalid_Runs: Operational performance log showing how many runs parsed successfully.
+- LLM_Raw_Responses: Python list containing the raw string digits captured during the 30 evaluation loops.
