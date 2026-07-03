@@ -15,17 +15,21 @@ set -euo pipefail
 module load Python/3.11.5
 
 REPO_ROOT="${SLURM_SUBMIT_DIR:-$(pwd)}"
-VENV_DIR="${HOME}/css-lab-project/.venv"
+if [ -z "${VENV_DIR:-}" ]; then
+    VENV_DIR="${REPO_ROOT}/../../.venv"
+fi
+if [ ! -d "${VENV_DIR}" ]; then
+    VENV_DIR="${HOME}/css-lab-project/.venv"
+fi
 
-if [ ! -f "${REPO_ROOT}/main.py" ]; then
-    echo "Could not find main.py in ${REPO_ROOT}" >&2
-    echo "Submit this job from the repository root:" >&2
-    echo "  cd /path/to/csslab-llm-bias && sbatch run_vllm.slurm" >&2
+if [ ! -f "${REPO_ROOT}/bias_calculation.py" ]; then
+    echo "Could not find bias_calculation.py in ${REPO_ROOT}" >&2
+    echo "Submit this job from the bias_calculation folder:" >&2
+    echo "  cd /path/to/csslab-llm-bias/bias_calculation && sbatch run_vllm.slurm" >&2
     exit 1
 fi
 
-# Lösche das alte VENV_DIR oder das alte "source"-Kommando und schreibe stattdessen:
-source /rwthfs/rz/cluster/home/xgy78490/css-lab-project/.venv/bin/activate
+source "${VENV_DIR}/bin/activate"
 cd "${REPO_ROOT}"
 
 if [ -z "${HF_TOKEN:-}" ] && [ -f "${HOME}/hfkey" ]; then
@@ -41,12 +45,14 @@ mkdir -p "$HF_HOME" logs
 MODEL_ID="${MODEL_ID:-mistralai/Mistral-7B-Instruct-v0.3}"
 PROMPTS_FILE="${PROMPTS_FILE:-prompts.txt}"
 PROMPT_MODE="${PROMPT_MODE:-lines}"
-OUTPUT_FILE="${OUTPUT_FILE:-logs/generations.jsonl}"
+OUTPUT_FILE="${OUTPUT_FILE:-results/bias_results.csv}"
 TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-1}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-4096}"
 GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.80}"
 MAX_TOKENS="${MAX_TOKENS:-80}"
 TEMPERATURE="${TEMPERATURE:-0.0}"
+QUANTIZATION="${QUANTIZATION:-}"
+LOAD_FORMAT="${LOAD_FORMAT:-}"
 
 SHUFFLE_ARGS=()
 if [ "${SHUFFLE_PROMPTS:-0}" = "1" ]; then
@@ -55,6 +61,8 @@ fi
 if [ -n "${SEED:-}" ]; then
     SHUFFLE_ARGS+=(--seed "$SEED")
 fi
+
+
 
 echo "Running on host: $(hostname)"
 echo "CUDA devices: ${CUDA_VISIBLE_DEVICES:-unset}"
@@ -65,7 +73,7 @@ echo "Prompts file: ${PROMPTS_FILE}"
 echo "Prompt mode: ${PROMPT_MODE}"
 echo "Shuffle prompts: ${SHUFFLE_PROMPTS:-0}"
 
-srun python3 main.py \
+srun python3 bias_calculation.py \
     --model-id "$MODEL_ID" \
     --prompts-file "$PROMPTS_FILE" \
     --prompt-mode "$PROMPT_MODE" \
@@ -75,4 +83,6 @@ srun python3 main.py \
     --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
     --max-tokens "$MAX_TOKENS" \
     --temperature "$TEMPERATURE" \
+    --quantization "$QUANTIZATION" \
+    --load-format "$LOAD_FORMAT" \
     "${SHUFFLE_ARGS[@]}"

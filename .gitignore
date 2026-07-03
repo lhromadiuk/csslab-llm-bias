@@ -2,6 +2,13 @@
 data/*
 !data/README.md
 
+notebook/*
+results/*
+
+experiments/wording_only_bias/Evaluation_Results.ipynb
+
+
+
 
 # macOS
 .DS_Store
