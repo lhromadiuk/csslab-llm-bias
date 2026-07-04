@@ -32,6 +32,9 @@ def approval(column, value):
     if column in ["ca13", "ca08"]:
         return int(value in [1, 2])
 
+    if column == "mm05":
+        return int(value <= 3)
+
     if column.startswith("ma") or column in ["mp02", "mm03", "mm04", "mm05"]:
         return int(value >= 5)
 
