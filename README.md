@@ -2,170 +2,189 @@
 
 This repository stores code and results for the Computational Social Science Lab @ RWTH Aachen University.
 
-## Repository structure
+## Repository Structure
 
-- `data/`: Raw data files are not published openly in this repository, please check the corresponding README file.
-- `experiments/`: project tasks with task-specific code and inputs.
-- `experiments/list_experiment/`: list experiment task, including trial construction and statement files.
-- `experiments/plain_prompts/`: plain prompt-file generation task.
-- `logs/`: logs generated during experiments.
-- `mwe/`: minimal working examples for model execution.
-- `main.py`: project entrypoint for selecting and running tasks.
-- `prompt_loader.py`: compatibility imports for older scripts.
-- `prompts.txt`: example prompt file.
-- `requirements.txt`: Python dependencies needed to run the project code.
-- `setup_env.sh`: setup script that creates or updates a Python virtual environment in the parent folder.
-- `run_vllm.slurm`: Slurm job script for running the list experiment task.
-- `vllm_runner.py`: reusable vLLM helpers used by `main.py` and the MWE.
-- `mwe/main_vllm.py`: minimal smoke test for checking that vLLM loads and generates.
-- `mwe/test_vllm.slurm`: Slurm job script for the vLLM smoke test.
+- `data/`: local survey/persona data. Large/raw files are not meant to be published.
+- `experiments/list_experiment/`: list-experiment trial construction and data files.
+- `experiments/plain_prompts/`: ordinary prompt-file generation task.
+- `analysis/`: analysis scripts and Jupyter notebooks.
+-  `experiments/bias_calculation/`: direct-response bias calculation code.
+- `main.py`: task entry point.
+- `run_vllm.slurm`: main Slurm launcher.
+- `vllm_runner.py`: shared vLLM loading/generation helpers.
 
-## Running vLLM
+## Setup
 
-Create or update the environment whenever `requirements.txt` changes:
+Create or update the Python environment:
 
 ```bash
 ./setup_env.sh
 ```
 
-Submit the default test job from mwe folder:
-
-```bash
-cd mwe
-sbatch test_vllm.slurm
-```
-
-The reusable vLLM functions can be imported from project code:
-
-```python
-from vllm_runner import load_model, run_prompt
-
-llm = load_model(model_id="meta-llama/Llama-3.2-1B-Instruct")
-answer = run_prompt(llm, "Explain vLLM briefly.")
-```
-
-## Project Tasks
-
-`main.py` is the project entrypoint. Prefer the task subcommands for new runs:
-`list` runs the list experiment, and `plain` runs ordinary prompt files.
-
-```bash
-python3 main.py list --list-trial-kind sensitive_treatment --replicates-per-sensitive 5
-python3 main.py plain --prompts-file prompts.txt
-```
-
-## List Experiment Mode
-
-This repository supports a list experiment setup with:
-
-- exactly 4 core statements from `experiments/list_experiment/data/core_statements.txt`
-- 1 sensitive statement at a time from `experiments/list_experiment/data/sensitive_statements.txt`
-- core-only control trials with just the 4 core statements
-- balanced order-effect blocks
-- `replicates_per_sensitive` total trials per sensitive statement, which must be a multiple of 5
-
-For example, `--replicates-per-sensitive 5` runs one full block per sensitive
-statement: the sensitive item appears exactly once in each position 1-5. A value
-of `10` runs two balanced blocks per sensitive statement.
-
-Core-only controls use a separate block size because they contain 4 statements:
-`--core-control-replicates 4` runs one block where each core statement appears
-once in each position 1-4.
-
-For analysis, parse each model `answer` as a number. The basic estimate for a
-sensitive item is:
+The Slurm script expects the virtual environment in the parent directory by
+default:
 
 ```text
-mean(answer for that sensitive_treatment item)
-- mean(answer for core_control trials)
+../.venv
 ```
 
-Run core-only controls via Slurm:
+You can override this with:
 
 ```bash
-sbatch --export=ALL,LIST_TRIAL_KIND=core_control,CORE_CONTROL_REPLICATES=4,SEED=42 run_vllm.slurm
+VENV_DIR=/path/to/.venv sbatch ...
 ```
 
-Run sensitive-treatment trials via Slurm:
+## Running Jobs
+
+Submit from the repository root:
 
 ```bash
-sbatch --export=ALL,LIST_TRIAL_KIND=sensitive_treatment,REPLICATES_PER_SENSITIVE=5,SEED=42 run_vllm.slurm
+sbatch --export=ALL,... run_vllm.slurm
 ```
 
-Run both controls and treatments via Slurm:
+The current `run_vllm.slurm` header requests:
 
 ```bash
-sbatch --export=ALL,LIST_TRIAL_KIND=both,CORE_CONTROL_REPLICATES=4,REPLICATES_PER_SENSITIVE=5,SEED=42 run_vllm.slurm
+#SBATCH --partition=c23g
+#SBATCH --gres=gpu:hopper:1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
+#SBATCH --time=19:45:00
 ```
 
-### Persona Random Mode
+For 2-GPU tensor parallel runs, override at submit time and set
+`TENSOR_PARALLEL_SIZE=2`.
 
-Use `persona_random` when personas are the respondents. Put one persona prompt
-per line in:
+## List Experiment
+
+The list experiment uses:
+
+- 4 core statements from `experiments/list_experiment/data/core_statements.txt`
+- sensitive statements from `experiments/list_experiment/data/sensitive_statements.txt`
+- optional wording-alteration statements from
+  `experiments/list_experiment/data/prompts_wording_alterations_binary.txt`
+
+Control rows contain 4 core statements. Treatment rows contain the 4 core
+statements plus 1 sensitive statement.
+
+The list-experiment estimate is:
 
 ```text
-experiments/list_experiment/data/personas.txt
+pi_LE,i = mean(Y_treatment,i) - mean(Y_control)
 ```
 
-In this mode each persona gets:
+Bias relative to ALLBUS is:
 
-- one random core-control ordering
-- one random ordering for every sensitive statement
+```text
+Bias_LE,i = pi_LE,i - pi_ALLBUS,i
+```
 
-So with 14 sensitive statements, each persona produces 15 rows total. With
-5,000 personas, that is 75,000 rows. The old `LIST_TRIAL_KIND`,
-`REPLICATES_PER_SENSITIVE`, and `CORE_CONTROL_REPLICATES` settings are for
-`balanced` mode; `persona_random` always creates the full per-persona bundle.
+### Balanced No-Persona Runs
 
-Run persona-random mode via Slurm:
+Run both control and treatment for the original 14 sensitive statements:
 
 ```bash
-sbatch --export=ALL,ASSIGNMENT_MODE=persona_random,PERSONAS_FILE=experiments/list_experiment/data/personas.txt,SEED=42 run_vllm.slurm
+sbatch --export=ALL,RUN_ID=qwen_original_no_persona,MODE=list,USE_PERSONAS=0,LIST_TRIAL_KIND=both,CORE_CONTROL_REPLICATES=24,REPLICATES_PER_SENSITIVE=35,MODEL_ID=Qwen/Qwen3-8B,TEMPERATURE=0.2,MAX_TOKENS=5,DISABLE_THINKING=1,SEED=42 run_vllm.slurm
 ```
 
-Default generation parameters are:
+For Llama/Mistral, omit `DISABLE_THINKING=1`.
 
-- `--temperature 0.2`
-- `--max-tokens 80`
+### Persona Runs
 
-Results are written to:
+Persona CSVs can contain multiple persona text columns. The compact file used
+for faster runs is:
 
-- `logs/list_experiment/<run_id>.generations.jsonl`
+```text
+data/ZA9089_JSON_first3.csv
+```
 
-Slurm stdout and stderr logs are written separately:
+Run original list experiment with personas:
 
-- `logs/list_experiment/slurm-<job_id>.out`
-- `logs/list_experiment/slurm-<job_id>.err`
+```bash
+sbatch --export=ALL,RUN_ID=qwen_persona_original,MODE=list,USE_PERSONAS=1,PERSONAS_FILE=data/ZA9089_JSON_first3.csv,PERSONA_PROFILE_COLUMN=top-2,MODEL_ID=Qwen/Qwen3-8B,TEMPERATURE=0.2,MAX_TOKENS=5,DISABLE_THINKING=1,SEED=42 run_vllm.slurm
+```
 
-### Output fields
+With personas, each respondent receives:
 
-Successful generation rows include:
+- 1 core-control list
+- 1 treatment list for each sensitive statement
 
-- `run_id`
-- `created_at_utc`
-- `trial_id`
-- `trial_index_in_run`
-- `mode`
-- `model_id`
-- `seed`
-- `generation_params`
-- `messages`: exact chat messages sent to vLLM
-- `answer`
+For 14 original statements this is 15 rows per persona. For 42 wording
+alterations this is 43 rows per persona.
 
-List-experiment rows also include:
+### Wording-Alteration Runs
 
-- `core_set_id`
+Use the wording file as `PROMPTS_FILE`:
+
+```bash
+sbatch --export=ALL,RUN_ID=qwen_persona_wording,MODE=list,USE_PERSONAS=1,PERSONAS_FILE=data/ZA9089_JSON_first3.csv,PERSONA_PROFILE_COLUMN=top-2,PROMPTS_FILE=experiments/list_experiment/data/prompts_wording_alterations_binary.txt,MODEL_ID=Qwen/Qwen3-8B,TEMPERATURE=0.2,MAX_TOKENS=5,DISABLE_THINKING=1,SEED=42 run_vllm.slurm
+```
+
+The wording file is organized in groups of three per ALLBUS item:
+
+- V1: everybody-does-it logic
+- V2: pure justification
+- V3: moral appeal
+
+So `sens_1..sens_3` map to the first ALLBUS item, `sens_4..sens_6`
+map to the second, etc.
+
+## Model/Generation Options
+
+Common environment variables for `run_vllm.slurm`:
+
+- `MODEL_ID`: Hugging Face model id.
+- `TEMPERATURE`: sampling temperature.
+- `MAX_TOKENS`: max generated tokens.
+- `BATCH_SIZE`: number of prompts sent to vLLM per batch.
+- `TENSOR_PARALLEL_SIZE`: tensor parallel size.
+- `GPU_MEMORY_UTILIZATION`: vLLM GPU memory target.
+- `QUANTIZATION`: e.g. `bitsandbytes`.
+- `LOAD_FORMAT`: e.g. `bitsandbytes`.
+- `ENFORCE_EAGER=1`: pass `--enforce-eager` to vLLM.
+- `MAX_NUM_SEQS`: pass `--max-num-seqs` to vLLM.
+- `DISABLE_THINKING=1`: disables Qwen3 thinking via chat template kwargs.
+
+Example quantized Llama-70B persona run on one GPU:
+
+```bash
+sbatch --export=ALL,RUN_ID=llama70_persona_original_quantized,MODE=list,USE_PERSONAS=1,PERSONAS_FILE=data/ZA9089_JSON_first3.csv,PERSONA_PROFILE_COLUMN=top-2,MODEL_ID=meta-llama/Llama-3.1-70B-Instruct,QUANTIZATION=bitsandbytes,LOAD_FORMAT=bitsandbytes,TENSOR_PARALLEL_SIZE=1,GPU_MEMORY_UTILIZATION=0.85,MAX_MODEL_LEN=1024,TEMPERATURE=0.2,MAX_TOKENS=5,BATCH_SIZE=32,MAX_NUM_SEQS=32,ENFORCE_EAGER=1,SEED=42 run_vllm.slurm
+```
+
+## Outputs
+
+Generation files are written as JSONL:
+
+```text
+logs/list_experiment/<run_id>.generations.jsonl
+```
+
+Slurm logs are written to:
+
+```text
+logs/list_experiment/slurm-<job_id>.out
+logs/list_experiment/slurm-<job_id>.err
+```
+
+Important JSONL fields:
+
 - `trial_kind`: `core_control` or `sensitive_treatment`
-- `item_count`: `4` for controls, `5` for treatments
-- `sensitive_id`: sensitive item id, or `null` for controls
-- `sensitive_text`: sensitive item text, or `null` for controls
-- `replicate_index`
-- `order_block_index`
-- `sensitive_position`: position 1-5, or `null` for controls
-- `order_labels`: compact item order, e.g. `["core_2", "sens_1", "core_4"]`
-- `persona_id`: persona id, or `null` for balanced mode
-- `persona_text`: persona prompt, or `null` for balanced mode
+- `sensitive_id`: `null` for controls, `sens_N` for treatments
+- `item_count`: 4 for controls, 5 for treatments
+- `order_labels`: compact order labels
+- `persona_id`: present for persona runs
+- `persona_profile_column`: e.g. `core` or `top-2`
+- `answer`: raw model answer
 
-The JSONL intentionally does not repeat the full rendered prompt separately from
-`messages`, and it does not store full `presented_items` text because the source
-statements already live under `experiments/list_experiment/data/`.
+For persona runs, full prompts are not repeated in the log to keep files
+smaller.
+
+## Analysis
+
+Main notebooks:
+
+- `analysis/list_experiment_analysis.ipynb`: original 14-item list experiment.
+- `analysis/combined_wording_list_experiment_analysis.ipynb`: list experiment
+  with wording alterations.
+- `experiments/cwording_only_bias/Evaluation_results.ipynb`: directional and SPB +
+  with wording alterations.
