@@ -23,7 +23,7 @@ from experiments.list_experiment.trials import (
     load_core_items,
     render_statements,
 )
-from vllm_runner import generate_from_messages, load_model
+from vllm_runner import generate_batch_from_messages, load_model
 
 
 def build_trial_records(args: Namespace) -> list[dict[str, object]]:
@@ -313,43 +313,51 @@ def run(args: Namespace) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     created_at_utc = utc_now_iso()
 
+    batch_size = max(1, args.batch_size)
     with output_path.open("w", encoding="utf-8") as out:
-        for index, payload in enumerate(records_to_run, start=1):
-            messages = payload["messages"]
-            answer = generate_from_messages(
+        for batch_start in range(0, len(records_to_run), batch_size):
+            batch = records_to_run[batch_start : batch_start + batch_size]
+            batch_messages = [payload["messages"] for payload in batch]
+            answers = generate_batch_from_messages(
                 llm,
-                messages,
+                batch_messages,
                 max_tokens=args.max_tokens,
                 temperature=args.temperature,
             )
-            record = {
-                "run_id": run_id,
-                "created_at_utc": created_at_utc,
-                "trial_id": index,
-                "trial_index_in_run": index,
-                "mode": "list",
-                "model_id": args.model_id,
-                "seed": args.seed,
-                "generation_params": generation_params,
-                "messages": None if payload["persona_id"] is not None else messages,
-                "core_set_id": args.core_set_id,
-                "trial_kind": payload["trial_kind"],
-                "item_count": payload["item_count"],
-                "sensitive_id": payload["sensitive_id"],
-                "sensitive_text": payload["sensitive_text"],
-                "replicate_index": payload["replicate_index"],
-                "order_block_index": payload["order_block_index"],
-                "sensitive_position": payload["sensitive_position"],
-                "order_labels": payload["order_labels"],
-                "persona_id": payload["persona_id"],
-                "persona_profile_column": payload["persona_profile_column"],
-                "answer": answer,
-            }
-            out.write(json.dumps(record, ensure_ascii=False) + "\n")
 
-            if args.print_each_response:
-                print(f"Trial {index}/{len(records_to_run)}")
-                print(answer)
+            for offset, (payload, answer) in enumerate(zip(batch, answers), start=1):
+                index = batch_start + offset
+                messages = payload["messages"]
+                record = {
+                    "run_id": run_id,
+                    "created_at_utc": created_at_utc,
+                    "trial_id": index,
+                    "trial_index_in_run": index,
+                    "mode": "list",
+                    "model_id": args.model_id,
+                    "seed": args.seed,
+                    "generation_params": generation_params,
+                    "messages": None if payload["persona_id"] is not None else messages,
+                    "core_set_id": args.core_set_id,
+                    "trial_kind": payload["trial_kind"],
+                    "item_count": payload["item_count"],
+                    "sensitive_id": payload["sensitive_id"],
+                    "sensitive_text": payload["sensitive_text"],
+                    "replicate_index": payload["replicate_index"],
+                    "order_block_index": payload["order_block_index"],
+                    "sensitive_position": payload["sensitive_position"],
+                    "order_labels": payload["order_labels"],
+                    "persona_id": payload["persona_id"],
+                    "persona_profile_column": payload["persona_profile_column"],
+                    "answer": answer,
+                }
+                out.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+                if args.print_each_response:
+                    print(f"Trial {index}/{len(records_to_run)}")
+                    print(answer)
+
+            out.flush()
 
     print(f"Run id: {run_id}")
     print(f"Completed trials: {len(records_to_run)}")

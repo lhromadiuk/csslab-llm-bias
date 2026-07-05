@@ -72,6 +72,22 @@ def generate_from_messages(
     return outputs[0].outputs[0].text.strip()
 
 
+def generate_batch_from_messages(
+    llm: Any,
+    messages_list: list[list[dict[str, str]]],
+    max_tokens: int = 80,
+    temperature: float = 0.0,
+) -> list[str]:
+    from vllm import SamplingParams
+
+    sampling_params = SamplingParams(
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    outputs = llm.chat(messages_list, sampling_params=sampling_params)
+    return [output.outputs[0].text.strip() for output in outputs]
+
+
 def run_prompt(
     llm: Any,
     prompt: str,

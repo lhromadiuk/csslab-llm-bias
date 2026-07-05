@@ -8,7 +8,10 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:hopper:1
 #SBATCH --mem=32G
-#SBATCH --time=05:45:00
+#SBATCH --time=19:45:00
+
+# For faster 70B runs, you can request 2 GPUs here and submit with
+# TENSOR_PARALLEL_SIZE=2, if the partition allows it.
 
 set -euo pipefail
 
@@ -52,7 +55,7 @@ MODEL_ID="${MODEL_ID:-meta-llama/Llama-3.2-1B-Instruct}"
 RUN_ID="${RUN_ID:-}"
 OUTPUT_FILE="${OUTPUT_FILE:-}"
 
-# Inputs shared across modes
+# Inputs shared across modes 
 if [ "$MODE" = "simple" ]; then
     PROMPTS_FILE="${PROMPTS_FILE:-prompts.txt}"
 else
@@ -75,12 +78,13 @@ SHUFFLE_TRIALS="${SHUFFLE_TRIALS:-0}"
 
 # Shared generation/model settings
 TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-1}"
-MAX_MODEL_LEN="${MAX_MODEL_LEN:-4096}"
-GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.80}"
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-1024}"
+GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.90}"
 QUANTIZATION="${QUANTIZATION:-}"
 LOAD_FORMAT="${LOAD_FORMAT:-}"
-MAX_TOKENS="${MAX_TOKENS:-80}"
+MAX_TOKENS="${MAX_TOKENS:-5}"
 TEMPERATURE="${TEMPERATURE:-0.2}"
+BATCH_SIZE="${BATCH_SIZE:-128}"
 
 COMMON_ARGS=()
 if [ -n "$RUN_ID" ]; then
@@ -162,6 +166,7 @@ if [ "$TASK" = "list" ]; then
 fi
 echo "Run id: ${RUN_ID:-auto}"
 echo "Output file: ${OUTPUT_FILE:-auto from run id}"
+echo "Batch size: ${BATCH_SIZE}"
 
 srun python3 main.py "$TASK" \
     --model-id "$MODEL_ID" \
@@ -170,5 +175,6 @@ srun python3 main.py "$TASK" \
     --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
     --max-tokens "$MAX_TOKENS" \
     --temperature "$TEMPERATURE" \
+    --batch-size "$BATCH_SIZE" \
     "${COMMON_ARGS[@]}" \
     "${TASK_ARGS[@]}"

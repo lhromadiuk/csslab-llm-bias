@@ -25,6 +25,7 @@ def add_shared_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--load-format", default=None)
     parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
     parser.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE)
+    parser.add_argument("--batch-size", type=int, default=128)
 
 
 def build_parser() -> argparse.ArgumentParser:
