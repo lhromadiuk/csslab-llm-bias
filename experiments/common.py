@@ -1,6 +1,25 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
 from pathlib import Path
 import random
 from typing import Optional, Union
+
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def default_run_id() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def build_messages(prompt: str, system_prompt: str | None = None) -> list[dict[str, str]]:
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+    return messages
 
 
 def load_prompts(
