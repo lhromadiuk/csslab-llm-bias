@@ -2,12 +2,11 @@
 #SBATCH --job-name=vllm_main
 #SBATCH --output=logs/list_experiment/slurm-%j.out
 #SBATCH --error=logs/list_experiment/slurm-%j.err
-#SBATCH --partition=anywhere
-#SBATCH --nodelist=aventinus
-#SBATCH --exclusive
+#SBATCH --partition=c23g
+#SBATCH --gres=gpu:hopper:1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=64G
+#SBATCH --mem=32G
 #SBATCH --time=19:45:00
 
 set -euo pipefail
