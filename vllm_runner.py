@@ -25,6 +25,8 @@ def load_model(
     tensor_parallel_size: int = 1,
     max_model_len: int = 4096,
     gpu_memory_utilization: float = 0.80,
+    enforce_eager: bool = False,
+    max_num_seqs: int | None = None,
     quantization: str | None = None,
     load_format: str | None = None,
 ) -> Any:
@@ -36,6 +38,9 @@ def load_model(
 
     print(f"Model: {model_id}")
     print(f"Tensor parallel size: {tensor_parallel_size}")
+    print(f"GPU memory utilization: {gpu_memory_utilization}")
+    print(f"Enforce eager: {enforce_eager}")
+    print(f"Max num seqs: {max_num_seqs or 'auto'}")
     print(f"Quantization: {quantization or 'none'}")
     print(f"Load format: {load_format or 'auto'}")
 
@@ -44,6 +49,8 @@ def load_model(
         model_kwargs["quantization"] = quantization
     if load_format:
         model_kwargs["load_format"] = load_format
+    if max_num_seqs is not None:
+        model_kwargs["max_num_seqs"] = max_num_seqs
 
     return LLM(
         model=model_id,
@@ -51,6 +58,7 @@ def load_model(
         tensor_parallel_size=tensor_parallel_size,
         max_model_len=max_model_len,
         gpu_memory_utilization=gpu_memory_utilization,
+        enforce_eager=enforce_eager,
         trust_remote_code=False,
         **model_kwargs,
     )
@@ -61,6 +69,7 @@ def generate_from_messages(
     messages: list[dict[str, str]],
     max_tokens: int = 80,
     temperature: float = 0.0,
+    disable_thinking: bool = False,
 ) -> str:
     from vllm import SamplingParams
 
@@ -68,7 +77,10 @@ def generate_from_messages(
         temperature=temperature,
         max_tokens=max_tokens,
     )
-    outputs = llm.chat(messages, sampling_params=sampling_params)
+    chat_kwargs = {}
+    if disable_thinking:
+        chat_kwargs["chat_template_kwargs"] = {"enable_thinking": False}
+    outputs = llm.chat(messages, sampling_params=sampling_params, **chat_kwargs)
     return outputs[0].outputs[0].text.strip()
 
 
@@ -77,6 +89,7 @@ def generate_batch_from_messages(
     messages_list: list[list[dict[str, str]]],
     max_tokens: int = 80,
     temperature: float = 0.0,
+    disable_thinking: bool = False,
 ) -> list[str]:
     from vllm import SamplingParams
 
@@ -84,7 +97,10 @@ def generate_batch_from_messages(
         temperature=temperature,
         max_tokens=max_tokens,
     )
-    outputs = llm.chat(messages_list, sampling_params=sampling_params)
+    chat_kwargs = {}
+    if disable_thinking:
+        chat_kwargs["chat_template_kwargs"] = {"enable_thinking": False}
+    outputs = llm.chat(messages_list, sampling_params=sampling_params, **chat_kwargs)
     return [output.outputs[0].text.strip() for output in outputs]
 
 
@@ -93,6 +109,7 @@ def run_prompt(
     prompt: str,
     max_tokens: int = 80,
     temperature: float = 0.2,
+    disable_thinking: bool = False,
 ) -> str:
     messages = [{"role": "user", "content": prompt}]
     return generate_from_messages(
@@ -100,4 +117,5 @@ def run_prompt(
         messages,
         max_tokens=max_tokens,
         temperature=temperature,
+        disable_thinking=disable_thinking,
     )

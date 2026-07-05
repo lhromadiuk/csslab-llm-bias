@@ -297,6 +297,7 @@ def run(args: Namespace) -> None:
     generation_params = {
         "temperature": args.temperature,
         "max_tokens": args.max_tokens,
+        "disable_thinking": args.disable_thinking,
     }
 
     records_to_run = build_trial_records(args)
@@ -305,6 +306,8 @@ def run(args: Namespace) -> None:
         tensor_parallel_size=args.tensor_parallel_size,
         max_model_len=args.max_model_len,
         gpu_memory_utilization=args.gpu_memory_utilization,
+        enforce_eager=args.enforce_eager,
+        max_num_seqs=args.max_num_seqs,
         quantization=args.quantization,
         load_format=args.load_format,
     )
@@ -323,6 +326,7 @@ def run(args: Namespace) -> None:
                 batch_messages,
                 max_tokens=args.max_tokens,
                 temperature=args.temperature,
+                disable_thinking=args.disable_thinking,
             )
 
             for offset, (payload, answer) in enumerate(zip(batch, answers), start=1):
