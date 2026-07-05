@@ -8,3 +8,6 @@ seaborn
 torch==2.8.0
 transformers>=4.55.2,<5
 vllm==0.11.0
+pandas>=2.0.0
+numpy>=1.24.0
+pyreadstat>=1.2.0

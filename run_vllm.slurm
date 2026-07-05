@@ -18,8 +18,7 @@ else
 fi
 
 REPO_ROOT="${SLURM_SUBMIT_DIR:-$(pwd)}"
-REPO_PARENT="$(cd "${REPO_ROOT}/.." && pwd)"
-VENV_DIR="${VENV_DIR:-${REPO_PARENT}/.venv}"
+VENV_DIR="${HOME}/css-lab-project/.venv"
 
 if [ ! -f "${REPO_ROOT}/main.py" ]; then
     echo "Could not find main.py in ${REPO_ROOT}" >&2
@@ -28,7 +27,8 @@ if [ ! -f "${REPO_ROOT}/main.py" ]; then
     exit 1
 fi
 
-source "${VENV_DIR}/bin/activate"
+# Lösche das alte VENV_DIR oder das alte "source"-Kommando und schreibe stattdessen:
+source /rwthfs/rz/cluster/home/xgy78490/css-lab-project/.venv/bin/activate
 cd "${REPO_ROOT}"
 
 if [ -z "${HF_TOKEN:-}" ] && [ -f "${REPO_ROOT}/hfkey" ]; then
@@ -53,16 +53,8 @@ if [ "$MODE" != "list" ] && [ "$MODE" != "simple" ]; then
     exit 1
 fi
 
-MODEL_ID="${MODEL_ID:-meta-llama/Llama-3.2-1B-Instruct}"
-RUN_ID="${RUN_ID:-}"
-OUTPUT_FILE="${OUTPUT_FILE:-}"
-
-# Inputs shared across modes 
-if [ "$MODE" = "simple" ]; then
-    PROMPTS_FILE="${PROMPTS_FILE:-prompts.txt}"
-else
-    PROMPTS_FILE="${PROMPTS_FILE:-experiments/list_experiment/data/sensitive_statements.txt}"
-fi
+MODEL_ID="${MODEL_ID:-mistralai/Mistral-7B-Instruct-v0.3}"
+PROMPTS_FILE="${PROMPTS_FILE:-prompts.txt}"
 PROMPT_MODE="${PROMPT_MODE:-lines}"
 SYSTEM_PROMPT="${SYSTEM_PROMPT:-}"
 

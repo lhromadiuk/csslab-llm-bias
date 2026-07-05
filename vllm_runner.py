@@ -5,7 +5,7 @@ import os
 from typing import Any, Optional
 
 
-DEFAULT_MODEL_ID = "meta-llama/Llama-3.2-1B-Instruct"
+DEFAULT_MODEL_ID = "meta-llama/Llama-3.1-70B-Instruct"
 
 
 def load_hf_token() -> Optional[str]:
